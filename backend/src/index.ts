@@ -12,6 +12,8 @@ import rateLimit from 'express-rate-limit';
 import { sessionMiddleware } from './middlewares/session.middleware';
 import { prisma } from './db/prisma'; 
 import productsRouter from './routes/product.routes';
+import chatRouter from './routes/chat.routes';
+
 
 
 
@@ -40,7 +42,7 @@ app.use(requestLogger);
 
 
 app.use('/api/products', productsRouter);
-
+app.use('/api/chat', chatRouter);
 app.get('/health', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
