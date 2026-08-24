@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrderStatus {
+  pending
+  paid
+  failed
+  expired
+}
+
+enum MessageRole {
+  user
+  assistant
+  system
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  category    String
+  subCategory String?
+  description String
+  price       Int      
+  stock       Int
+  imageUrl    String?
+  size        String?
+  createdAt   DateTime @default(now())
+
+  crossSellsFrom ProductCrossSell[] @relation("FromProduct")
+  crossSellsTo   ProductCrossSell[] @relation("ToProduct")
+  orderItems     OrderItem[]
+
+  @@index([category])
+}
+
+model ProductCrossSell {
+  id                 String @id @default(uuid())
+  productId          String
+  crossSellProductId String
+
+  product          Product @relation("FromProduct", fields: [productId], references: [id])
+  crossSellProduct Product @relation("ToProduct", fields: [crossSellProductId], references: [id])
+
+  @@unique([productId, crossSellProductId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  createdAt    DateTime @default(now())
+  lastActiveAt DateTime @updatedAt
+
+  messages Message[]
+  orders   Order[]
+}
+
+model Message {
+  id        String      @id @default(uuid())
+  sessionId String
+  role      MessageRole
+  content   String
+  createdAt DateTime    @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id])
+
+  @@index([sessionId])
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  sessionId       String
+  status          OrderStatus @default(pending)
+  subtotal        Int
+  deliveryFee     Int
+  total           Int
+  customerName    String
+  phone           String
+  address         String
+  pincode         String
+  deliveryNotes   String?
+  razorpayOrderId String?     @unique
+  trackingToken   String      @unique @default(uuid())
+  reservedUntil   DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  session   Session     @relation(fields: [sessionId], references: [id])
+  items     OrderItem[]
+  auditLogs AuditLog[]
+
+  @@index([phone])
+  @@index([status])
+}
+
+model OrderItem {
+  id               String @id @default(uuid())
+  orderId          String
+  productId        String
+  qty              Int
+  unitPriceAtOrder Int    // price snapshot at order time — never re-read live product price
+
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  orderId    String?
+  sessionId  String?
+  eventType  String
+  reasonText String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  order Order? @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+}
+
+model ProcessedWebhookEvent {
+  id              String   @id @default(uuid())
+  razorpayEventId String   @unique
+  processedAt     DateTime @default(now())
+}
+
+model CustomerPreference {
+  id          String   @id @default(uuid())
+  phone       String   @unique
+  preferences Json
+  updatedAt   DateTime @updatedAt
+}

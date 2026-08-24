@@ -5,5 +5,11 @@ export const logger = pino({
   ...(process.env.NODE_ENV !== 'production' && {
     transport: { target: 'pino-pretty', options: { colorize: true } },
   }),
-  redact: ['req.headers.authorization', '*.phone', '*.address'],
+  redact: [
+    'req.headers.authorization',
+    '*.phone',
+    '*.address',
+    'req.headers.cookie',
+    'res.headers["set-cookie"]',
+  ],
 });
