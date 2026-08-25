@@ -15,6 +15,8 @@ import { env } from '../config/env';
 import { checkpointer } from './checkpointer';
 import { getUpsellCandidate } from '../services/upsell.services';
 import { getCartSummary } from '../services/cart.services';
+import { prisma } from '../db/prisma';
+
 
 const tools = [searchProductsTool];
 const systemPrompt = buildSystemPrompt({ storeName: 'Convocart', category: 'shoe' });
@@ -69,10 +71,28 @@ async function finalizeNode(state: typeof ConvocartState.State) {
     },
   ]);
 
-  
-  if (structured.upsellProductId && structured.upsellProductId !== candidate?.productId) {
+  // Validate the model's upsell decision
+  if (
+    structured.upsellProductId &&
+    structured.upsellProductId !== candidate?.productId
+  ) {
     structured.upsellProductId = null;
     structured.upsellReason = null;
+  }
+
+  // Audit the actual upsell outcome
+  if (candidate) {
+    await prisma.auditLog.create({
+      data: {
+        sessionId: state.sessionId,
+        eventType: structured.upsellProductId
+          ? 'upsell_offered'
+          : 'upsell_candidate_skipped',
+        reasonText: structured.upsellProductId
+          ? `Offered ${candidate.name} — ${structured.upsellReason ?? 'no reason given'}`
+          : `Candidate ${candidate.name} was available but not offered this turn`,
+      },
+    });
   }
 
   return { structuredOutput: structured };

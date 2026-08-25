@@ -4,12 +4,18 @@ import { getCartSummary } from './cart.services';
 import { ApiError } from '../utils/ApiError';
 import type { z } from 'zod';
 import type { DeliveryDetails } from '../schemas/checkout.schema';
+import { redis } from '../db/redis';
 
 const RESERVATION_MINUTES = 15;
 
 export async function confirmOrder(sessionId: string, delivery: z.infer<typeof DeliveryDetails>) {
   const cart = await getCartSummary(sessionId);
   if (cart.items.length === 0) throw new ApiError('CONFLICT', 'Cart is empty');
+  const lockKey = `checkout-lock:${sessionId}`;
+  const acquired = await redis.set(lockKey, '1', 'EX', 30, 'NX'); // 30s lock, auto-expires if something crashes
+  if (!acquired) {
+    throw new ApiError('CONFLICT', 'A checkout is already in progress for this session');
+  }
 
   // Atomic, qty-aware stock reservation — this is the exact query from the stock-race discussion
   const reservedItems: { productId: string; qty: number }[] = [];
@@ -36,11 +42,26 @@ export async function confirmOrder(sessionId: string, delivery: z.infer<typeof D
           total: cart.total,
           customerName: delivery.customerName,
           phone: delivery.phone,
+          email: delivery.email,
           address: delivery.address,
           pincode: delivery.pincode,
           deliveryNotes: delivery.deliveryNotes ?? null,
           reservedUntil: new Date(Date.now() + RESERVATION_MINUTES * 60 * 1000),
-          items: { create: cart.items.map((i) => ({ productId: i.productId, qty: i.qty, unitPriceAtOrder: i.unitPrice })) },
+          items: {
+            create: cart.items.map((i) => ({
+              productId: i.productId,
+              qty: i.qty,
+              unitPriceAtOrder: i.unitPrice,
+            })),
+          },
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          orderId: order.id,
+          sessionId,
+          eventType: 'order_created',
+          reasonText: `Order placed — ${cart.items.length} item(s), ₹${cart.total / 100} total, stock reserved for ${RESERVATION_MINUTES} min`,
         },
       });
     });
@@ -49,12 +70,10 @@ export async function confirmOrder(sessionId: string, delivery: z.infer<typeof D
     throw err;
   }
 
-  // Fetch the order we just created (transaction doesn't return it directly above in a typed way)
-  const order = await prisma.order.findFirst({
+  const order = await prisma.order.findFirstOrThrow({
     where: { sessionId, status: 'pending' },
     orderBy: { createdAt: 'desc' },
   });
-  if (!order) throw new Error('Order creation failed unexpectedly');
 
   // Now create the Razorpay order — outside the DB transaction, since it's a network call
   const razorpayOrder = await razorpay.orders.create({
@@ -68,7 +87,6 @@ export async function confirmOrder(sessionId: string, delivery: z.infer<typeof D
     data: { razorpayOrderId: razorpayOrder.id },
   });
 
-  // Cart is now "spent" — clear it so the same items can't be reserved twice
   await prisma.session.update({ where: { id: sessionId }, data: { cart: [] } });
 
   return {
