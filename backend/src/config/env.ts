@@ -11,6 +11,8 @@ const EnvSchema = z.object({
   FRONTEND_URL: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
   LANGSMITH_API_KEY: z.string().optional(),
+  RAZORPAY_KEY_ID: z.string().min(1),
+  RAZORPAY_KEY_SECRET: z.string().min(1),
 });
 
 const parsed = EnvSchema.safeParse(process.env);

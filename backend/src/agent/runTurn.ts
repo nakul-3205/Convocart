@@ -21,14 +21,13 @@ export async function runAgentTurn(sessionId: string, message: string): Promise<
     try {
       const result = await withTimeout(
         compiledGraph.invoke(
-          { messages: [{ role: 'user', content: message }] },
+          { messages: [{ role: 'user', content: message }], sessionId }, // sessionId added here
           { configurable: { thread_id: sessionId } },
         ),
         TIMEOUT_MS,
       );
 
-      // Defense in depth: re-validate even though withStructuredOutput should already guarantee shape.
-      // Never trust a single layer with something this important.
+      
       const validated = AgentTurnOutput.safeParse(result.structuredOutput);
       if (!validated.success) {
         throw new Error(`Agent returned invalid structured output: ${validated.error.message}`);

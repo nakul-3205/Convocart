@@ -13,6 +13,8 @@ import { sessionMiddleware } from './middlewares/session.middleware';
 import { prisma } from './db/prisma'; 
 import productsRouter from './routes/product.routes';
 import chatRouter from './routes/chat.routes';
+import { ensureCheckpointerSetup } from './agent/checkpointer';
+import cartRouter from './routes/cart.routes';
 
 
 
@@ -39,10 +41,16 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(sessionMiddleware);
 app.use(requestLogger);
+async function start() {
+  await ensureCheckpointerSetup();
+  const server = app.listen(PORT, () => logger.info(`Convocart backend running on :${PORT}`));
 
+}
+start();
 
 app.use('/api/products', productsRouter);
 app.use('/api/chat', chatRouter);
+app.use('/api/cart', cartRouter);
 app.get('/health', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -52,9 +60,7 @@ app.get('/health', async (_req, res) => {
   }
 });
 
-app.get('/debug-sentry', () => {
-  throw new Error('Sentry test error — safe to remove after confirming this shows up in sentry.io');
-});
+
 
 
 async function shutdown(signal: string) {
