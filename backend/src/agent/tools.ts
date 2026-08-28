@@ -16,7 +16,7 @@ export const searchProductsTool = tool(
   {
     name: 'search_products',
     description: 'Search the shoe catalog by sub-category, size, and max price. Use whenever the customer describes what they want.',
-    schema: ProductSearchQuery.omit({ page: true, pageSize: true }), // pagination stays out of the LLM's control
+    schema: ProductSearchQuery.omit({ page: true, pageSize: true }),
   },
 );
 

@@ -7,7 +7,7 @@ import { logger } from '../utils/logger';
 export async function razorpayWebhookHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const signature = req.headers['x-razorpay-signature'] as string | undefined;
-    const rawBody = (req as any).rawBody as Buffer; 
+    const rawBody = req.body as Buffer;
 
     if (!signature || !rawBody) {
       logger.warn('Webhook missing signature or raw body');
@@ -18,7 +18,6 @@ export async function razorpayWebhookHandler(req: Request, res: Response, next: 
       .createHmac('sha256', env.RAZORPAY_WEBHOOK_SECRET)
       .update(rawBody)
       .digest('hex');
-
 
     const valid =
       expected.length === signature.length &&
@@ -32,7 +31,7 @@ export async function razorpayWebhookHandler(req: Request, res: Response, next: 
     const event = JSON.parse(rawBody.toString());
     await webhookQueue.add('process-event', event);
 
-    return res.status(200).json({ received: true }); 
+    return res.status(200).json({ received: true });
   } catch (err) {
     next(err);
   }

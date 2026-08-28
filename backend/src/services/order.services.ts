@@ -12,14 +12,14 @@ export async function confirmOrder(sessionId: string, delivery: z.infer<typeof D
   const cart = await getCartSummary(sessionId);
   if (cart.items.length === 0) throw new ApiError('CONFLICT', 'Cart is empty');
   const lockKey = `checkout-lock:${sessionId}`;
-  const acquired = await redis.set(lockKey, '1', 'EX', 30, 'NX'); // 30s lock, auto-expires if something crashes
+  const acquired = await redis.set(lockKey, '1', 'EX', 30, 'NX'); // 30s is a dead-process safety net; the finally below releases it in the normal case
   if (!acquired) {
     throw new ApiError('CONFLICT', 'A checkout is already in progress for this session');
   }
 
-  // Atomic, qty-aware stock reservation — this is the exact query from the stock-race discussion
-  const reservedItems: { productId: string; qty: number }[] = [];
   try {
+    let createdOrder: { id: string; total: number };
+
     await prisma.$transaction(async (tx) => {
       for (const item of cart.items) {
         const result: { stock: number }[] = await tx.$queryRaw`
@@ -30,10 +30,9 @@ export async function confirmOrder(sessionId: string, delivery: z.infer<typeof D
         if (result.length === 0) {
           throw new ApiError('CONFLICT', `${item.name} just sold out — sorry about that.`);
         }
-        reservedItems.push({ productId: item.productId, qty: item.qty });
       }
 
-      await tx.order.create({
+      createdOrder = await tx.order.create({
         data: {
           sessionId,
           status: 'pending',
@@ -56,44 +55,39 @@ export async function confirmOrder(sessionId: string, delivery: z.infer<typeof D
           },
         },
       });
+
+      
       await tx.auditLog.create({
         data: {
-          orderId: order.id,
+          orderId: createdOrder.id,
           sessionId,
           eventType: 'order_created',
           reasonText: `Order placed — ${cart.items.length} item(s), ₹${cart.total / 100} total, stock reserved for ${RESERVATION_MINUTES} min`,
         },
       });
     });
-  } catch (err) {
-    if (err instanceof ApiError) throw err;
-    throw err;
+
+    const razorpayOrder = await razorpay.orders.create({
+      amount: createdOrder!.total, // already in paise
+      currency: 'INR',
+      receipt: createdOrder!.id,
+    });
+
+    const updated = await prisma.order.update({
+      where: { id: createdOrder!.id },
+      data: { razorpayOrderId: razorpayOrder.id },
+    });
+
+    await prisma.session.update({ where: { id: sessionId }, data: { cart: [] } });
+
+    return {
+      orderId: updated.id,
+      razorpayOrderId: razorpayOrder.id,
+      amount: updated.total,
+      currency: 'INR',
+      keyId: process.env.RAZORPAY_KEY_ID,
+    };
+  } finally {
+    await redis.del(lockKey);
   }
-
-  const order = await prisma.order.findFirstOrThrow({
-    where: { sessionId, status: 'pending' },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  // Now create the Razorpay order — outside the DB transaction, since it's a network call
-  const razorpayOrder = await razorpay.orders.create({
-    amount: order.total, // already in paise
-    currency: 'INR',
-    receipt: order.id,
-  });
-
-  const updated = await prisma.order.update({
-    where: { id: order.id },
-    data: { razorpayOrderId: razorpayOrder.id },
-  });
-
-  await prisma.session.update({ where: { id: sessionId }, data: { cart: [] } });
-
-  return {
-    orderId: updated.id,
-    razorpayOrderId: razorpayOrder.id,
-    amount: updated.total,
-    currency: 'INR',
-    keyId: process.env.RAZORPAY_KEY_ID, // safe to expose — this is the public key, frontend needs it for Checkout.js
-  };
 }

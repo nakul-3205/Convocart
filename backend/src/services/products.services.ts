@@ -23,3 +23,10 @@ export async function searchProducts(query: ProductSearchQueryType) {
 
   return { items, page, pageSize, total, hasMore: page * pageSize < total };
 }
+
+export async function getProductsByIds(ids: string[]) {
+  if (ids.length === 0) return [];
+  const products = await prisma.product.findMany({ where: { id: { in: ids } } });
+  // preserve the original order — Prisma's findMany doesn't guarantee it matches `ids` order
+  return ids.map((id) => products.find((p) => p.id === id)).filter((p): p is NonNullable<typeof p> => Boolean(p));
+}
