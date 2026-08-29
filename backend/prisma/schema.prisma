@@ -58,6 +58,7 @@ model Session {
 
   messages Message[]
   orders   Order[]
+  shownProductIds Json?
 }
 
 model Message {

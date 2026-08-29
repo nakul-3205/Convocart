@@ -1,14 +1,7 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
-const ModelProviderEnum = z.enum([
-  'anthropic',
-  'openrouter',
-  'groq',
-  'openai',
-  'gemini',
-  'ollama',
-]);
+const ModelProviderEnum = z.enum(['anthropic', 'openrouter', 'groq', 'openai', 'gemini', 'ollama']);
 
 const EnvSchema = z
   .object({
@@ -78,10 +71,7 @@ const EnvSchema = z
 const parsed = EnvSchema.safeParse(process.env);
 
 if (!parsed.success) {
-  console.error(
-    'Invalid or missing environment variables:',
-    parsed.error.flatten().fieldErrors,
-  );
+  console.error('Invalid or missing environment variables:', parsed.error.flatten().fieldErrors);
 
   process.exit(1);
 }

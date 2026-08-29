@@ -41,7 +41,7 @@ export const cleanupWorker = new Worker(
             data: {
               orderId: order.id,
               eventType: 'payment_reconciled_late',
-              reasonText: 'Webhook was never received, but Razorpay confirmed payment on reconciliation check — order marked paid, stock retained',
+              reasonText: 'Webhook was never received, but Razorpay confirmed payment on reconciliation check, order marked paid, stock retained',
             },
           }),
         ]);

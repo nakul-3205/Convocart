@@ -98,8 +98,9 @@ export async function runAgentTurn(
           signal: controller.signal,
         },
       );
-
+      logger.info({result},'Agent output')
       const validated = AgentTurnOutput.safeParse(result.structuredOutput);
+      logger.info({validated},'Agent output validated one')
 
       if (!validated.success) {
         throw new Error(`Agent returned invalid structured output: ${validated.error.message}`);

@@ -20,6 +20,8 @@ import chatRouter from './routes/chat.routes';
 import cartRouter from './routes/cart.routes';
 import webhookRouter from './routes/webhook.routes';
 import adminRouter from './routes/admin.routes';
+import trackRouter from './routes/track.routes';
+
 
 import { ensureCheckpointerSetup } from './agent/checkpointer';
 import { scheduleCleanupJob } from './queue/cleanup.worker';
@@ -80,7 +82,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/cart', cartRouter);
-
+app.use('/api/track', trackRouter);
 app.get('/health', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
