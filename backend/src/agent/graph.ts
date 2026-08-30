@@ -107,7 +107,7 @@ async function getTrimmedMessages(messages: typeof ConvocartState.State.messages
   });
 }
 
-function normalizeMessageContent(messages: any[]): any[] {
+export function normalizeMessageContent(messages: any[]): any[] {
   return messages.map((message) => {
     let content = message.content;
     if (Array.isArray(content)) {
@@ -120,7 +120,7 @@ function normalizeMessageContent(messages: any[]): any[] {
 }
 
 
-function toSafeMessages(messages: any[]): { role: 'user' | 'assistant' | 'system'; content: string }[] {
+export function toSafeMessages(messages: any[]): { role: 'user' | 'assistant' | 'system'; content: string }[] {
   return messages.map((message) => {
     const type = typeof message._getType === 'function' ? message._getType() : message.role;
 

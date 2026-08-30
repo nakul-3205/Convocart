@@ -14,6 +14,6 @@ export async function getUpsellCandidate(cartProductIds: string[]) {
 
   if (eligible.length === 0) return null;
 
-  const chosen = eligible[Math.floor(Math.random() * eligible.length)];
+  const chosen = eligible[Math.floor(Math.random() * eligible.length)]!;
   return { productId: chosen.id, name: chosen.name, price: chosen.price / 100 };
 }

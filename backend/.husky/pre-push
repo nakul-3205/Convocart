@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+set -e
+cd backend
+npm run test:integration

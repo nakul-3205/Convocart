@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { z } from 'zod';
+import { logger } from '../utils/logger';
 
 const ModelProviderEnum = z.enum(['anthropic', 'openrouter', 'groq', 'openai', 'gemini', 'ollama']);
 
@@ -11,6 +12,7 @@ const EnvSchema = z
     DATABASE_URL: z.string().min(1),
     ADMIN_PASSWORD: z.string().min(1),
     SESSION_COOKIE_SECRET: z.string().min(1),
+
     FRONTEND_URL: z.string().optional(),
     APP_URL: z.string().optional(),
     SENTRY_DSN: z.string().optional(),
@@ -28,7 +30,6 @@ const EnvSchema = z
     MODEL_PROVIDER: ModelProviderEnum.default('gemini'),
     MODEL_NAME: z.string().default('gemini-3.5-flash'),
 
-    // Provider API keys
     ANTHROPIC_API_KEY: z.string().optional(),
     OPENROUTER_API_KEY: z.string().optional(),
     GROQ_API_KEY: z.string().optional(),
@@ -36,11 +37,13 @@ const EnvSchema = z
     GEMINI_API_KEY: z.string().optional(),
     GEMINI_API_KEY_BACKUP: z.string().optional(),
 
-    // Local Ollama
     OLLAMA_BASE_URL: z.string().default('http://localhost:11434'),
   })
   .superRefine((data, ctx) => {
-    // Ollama doesn't require an API key
+    if (data.NODE_ENV === 'test') {
+      return;
+    }
+
     if (data.MODEL_PROVIDER === 'ollama') {
       return;
     }
@@ -68,10 +71,31 @@ const EnvSchema = z
     }
   });
 
-const parsed = EnvSchema.safeParse(process.env);
+const isTest = process.env.NODE_ENV === 'test';
+
+const parsed = EnvSchema.safeParse(
+  isTest
+    ? {
+        ...process.env,
+
+        DATABASE_URL: process.env.DATABASE_URL ?? 'test',
+        ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ?? 'test',
+        SESSION_COOKIE_SECRET: process.env.SESSION_COOKIE_SECRET ?? 'test',
+
+        REDIS_URL: process.env.REDIS_URL ?? 'test',
+
+        RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID ?? 'test',
+        RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET ?? 'test',
+        RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET ?? 'test',
+
+        GMAIL_USER_NAME: process.env.GMAIL_USER_NAME ?? 'test',
+        GMAIL_APP_PASSWORD: process.env.GMAIL_APP_PASSWORD ?? 'test',
+      }
+    : process.env,
+);
 
 if (!parsed.success) {
-  console.error('Invalid or missing environment variables:', parsed.error.flatten().fieldErrors);
+  logger.error(parsed.error.flatten().fieldErrors, 'Invalid or missing environment variables:');
 
   process.exit(1);
 }
