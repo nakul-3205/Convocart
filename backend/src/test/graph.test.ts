@@ -18,8 +18,16 @@ describe('normalizeMessageContent', () => {
   });
 
   it('preserves tool_calls — this is the exact thing that must never break again', () => {
-    const input = [{ content: 'text', role: 'assistant', tool_calls: [{ id: 'call_1', name: 'search_products' }] }];
-    expect(normalizeMessageContent(input)[0].tool_calls).toEqual([{ id: 'call_1', name: 'search_products' }]);
+    const input = [
+      {
+        content: 'text',
+        role: 'assistant',
+        tool_calls: [{ id: 'call_1', name: 'search_products' }],
+      },
+    ];
+    expect(normalizeMessageContent(input)[0].tool_calls).toEqual([
+      { id: 'call_1', name: 'search_products' },
+    ]);
   });
 });
 
@@ -27,8 +35,8 @@ describe('toSafeMessages', () => {
   it('converts a tool message to role user, never role system (Gemini rejects mid-array system messages)', () => {
     const input = [{ _getType: () => 'tool', content: '{"result":"ok"}', name: 'search_products' }];
     const result = toSafeMessages(input);
-    expect(result[0].role).toBe('user');
-    expect(result[0].content).toContain('search_products');
+    expect(result[0]!.role).toBe('user');
+    expect(result[0]!.content).toContain('search_products');
   });
 
   it('maps human messages to role user and preserves content', () => {
@@ -38,6 +46,6 @@ describe('toSafeMessages', () => {
 
   it('falls back to a placeholder for genuinely empty content, never an empty string', () => {
     const input = [{ _getType: () => 'ai', content: '' }];
-    expect(toSafeMessages(input)[0].content).toBe('(no text content)');
+    expect(toSafeMessages(input)[0]!.content).toBe('(no text content)');
   });
 });

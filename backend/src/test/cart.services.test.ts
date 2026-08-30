@@ -45,7 +45,7 @@ describe('getCartSummary', () => {
 
     const result = await getCartSummary('session-1');
 
-    expect(result.items[0].lineTotal).toBe(699800);
+    expect(result.items[0]!.lineTotal).toBe(699800);
     expect(result.subtotal).toBe(699800);
     expect(result.deliveryFee).toBe(3000);
     expect(result.total).toBe(702800);

@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+set -e
 cd backend
 npx lint-staged
 npm run typecheck
