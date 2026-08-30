@@ -40,7 +40,10 @@ const EnvSchema = z
     OLLAMA_BASE_URL: z.string().default('http://localhost:11434'),
   })
   .superRefine((data, ctx) => {
-    // Ollama doesn't require an API key
+    if (data.NODE_ENV === 'test') {
+      return;
+    }
+
     if (data.MODEL_PROVIDER === 'ollama') {
       return;
     }
