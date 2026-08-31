@@ -16,8 +16,8 @@ export async function adminLoginHandler(req: Request, res: Response, next: NextF
     res.cookie('convocart_admin', 'authenticated', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 4 * 60 * 60 * 1000, // 4h session, plenty for a demo/pitch
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 4 * 60 * 60 * 1000,
     });
     return ok(res, { authenticated: true });
   } catch (err) {
