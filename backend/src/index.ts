@@ -22,15 +22,13 @@ import webhookRouter from './routes/webhook.routes';
 import adminRouter from './routes/admin.routes';
 import trackRouter from './routes/track.routes';
 
-
 import { ensureCheckpointerSetup } from './agent/checkpointer';
 import { scheduleCleanupJob } from './queue/cleanup.worker';
 import './queue/webhook.worker';
 import './queue/chat.worker';
 
-const PORT = Number(env.PORT) || 4000;
+const PORT = Number(env.PORT);
 const FRONTEND_URL = env.FRONTEND_URL;
-logger.info(FRONTEND_URL);
 if (!FRONTEND_URL) {
   logger.warn('FRONTEND_URL is not set CORS will reject all browser origins');
 }
