@@ -1,7 +1,7 @@
 import { devLogger } from './devLogger';
 
-export const API_BASE = import.meta.env.API_URL || 'http://localhost:4000';
-
+export const API_BASE = import.meta.env.VITE_API_URL;
+devLogger.request(API_BASE)
 export class ApiError extends Error {
   constructor(code, message, status, details) {
     super(message);
@@ -30,7 +30,7 @@ async function request(path, options = {}) {
     devLogger.networkError(method, url, ms);
     throw new ApiError(
       'NETWORK',
-      `Could not reach the backend at ${API_BASE}. Is it running, and does VITE_API_URL match its port?`,
+      `Could not reach the backend`,
       0,
     );
   }
