@@ -58,6 +58,7 @@ model Session {
 
   messages Message[]
   orders   Order[]
+  upsellOfferedOnce Boolean @default(false)
   shownProductIds Json?
 }
 

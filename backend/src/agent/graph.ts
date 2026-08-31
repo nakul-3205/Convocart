@@ -1,10 +1,4 @@
-import {
-  StateGraph,
-  MessagesAnnotation,
-  Annotation,
-  START,
-  END,
-} from '@langchain/langgraph';
+import { StateGraph, MessagesAnnotation, Annotation, START, END } from '@langchain/langgraph';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { ChatOpenAI } from '@langchain/openai';
 import { ChatGroq } from '@langchain/groq';
@@ -102,7 +96,11 @@ async function getTrimmedMessages(messages: typeof ConvocartState.State.messages
     maxTokens: 2500,
     strategy: 'last',
     tokenCounter: (msgs) =>
-      msgs.reduce((sum, message) => sum + (typeof message.content === 'string' ? message.content.length / 4 : 100), 0),
+      msgs.reduce(
+        (sum, message) =>
+          sum + (typeof message.content === 'string' ? message.content.length / 4 : 100),
+        0,
+      ),
     startOn: 'human',
   });
 }
@@ -111,7 +109,10 @@ export function normalizeMessageContent(messages: any[]): any[] {
   return messages.map((message) => {
     let content = message.content;
     if (Array.isArray(content)) {
-      content = content.map((part: any) => (typeof part === 'string' ? part : (part?.text ?? ''))).filter(Boolean).join(' ');
+      content = content
+        .map((part: any) => (typeof part === 'string' ? part : (part?.text ?? '')))
+        .filter(Boolean)
+        .join(' ');
     } else if (content == null) {
       content = '';
     }
@@ -119,22 +120,31 @@ export function normalizeMessageContent(messages: any[]): any[] {
   });
 }
 
-
-export function toSafeMessages(messages: any[]): { role: 'user' | 'assistant' | 'system'; content: string }[] {
+export function toSafeMessages(
+  messages: any[],
+): { role: 'user' | 'assistant' | 'system'; content: string }[] {
   return messages.map((message) => {
     const type = typeof message._getType === 'function' ? message._getType() : message.role;
 
     if (type === 'tool') {
-      const raw = typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
-      return { role: 'user' as const, content: `[Tool result from ${message.name ?? 'a tool'}]: ${raw}` };
+      const raw =
+        typeof message.content === 'string' ? message.content : JSON.stringify(message.content);
+      return {
+        role: 'user' as const,
+        content: `[Tool result from ${message.name ?? 'a tool'}]: ${raw}`,
+      };
     }
 
-    const role: 'user' | 'assistant' | 'system' = type === 'human' ? 'user' : type === 'system' ? 'system' : 'assistant';
+    const role: 'user' | 'assistant' | 'system' =
+      type === 'human' ? 'user' : type === 'system' ? 'system' : 'assistant';
     let content = '';
     if (typeof message.content === 'string') {
       content = message.content;
     } else if (Array.isArray(message.content)) {
-      content = message.content.map((part: any) => (typeof part === 'string' ? part : (part?.text ?? ''))).filter(Boolean).join(' ');
+      content = message.content
+        .map((part: any) => (typeof part === 'string' ? part : (part?.text ?? '')))
+        .filter(Boolean)
+        .join(' ');
     }
     return { role, content: content.trim() || '(no text content)' };
   });
@@ -152,19 +162,43 @@ function shouldContinue(state: typeof ConvocartState.State) {
   return last.tool_calls?.length ? 'tools' : 'finalize';
 }
 
-async function finalizeNode(state: typeof ConvocartState.State) {
-  const cart = await getCartSummary(state.sessionId);
-  const cartProductIds = cart.items.map((item) => item.productId);
-
-  const alreadyOfferedOnce = await prisma.auditLog.findFirst({
-    where: { sessionId: state.sessionId, eventType: 'upsell_offered' },
+function wasAddToCartCalledThisTurn(messages: any[]): boolean {
+  let lastHumanIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const type =
+      typeof messages[i]._getType === 'function' ? messages[i]._getType() : messages[i].role;
+    if (type === 'human') {
+      lastHumanIndex = i;
+      break;
+    }
+  }
+  if (lastHumanIndex === -1) return false;
+  return messages.slice(lastHumanIndex).some((m) => {
+    const type = typeof m._getType === 'function' ? m._getType() : m.role;
+    return type === 'tool' && m.name === 'add_to_cart';
   });
+}
 
-  const candidate = alreadyOfferedOnce ? null : await getUpsellCandidate(cartProductIds);
+async function finalizeNode(state: typeof ConvocartState.State) {
+  let candidate: Awaited<ReturnType<typeof getUpsellCandidate>> = null;
+
+  // Only touches the DB at all if a cart-add genuinely happened this turn —
+  // every other turn (searches, questions, chit-chat) skips this entirely.
+  if (wasAddToCartCalledThisTurn(state.messages)) {
+    const session = await prisma.session.findUnique({
+      where: { id: state.sessionId },
+      select: { upsellOfferedOnce: true },
+    });
+
+    if (!session?.upsellOfferedOnce) {
+      const cart = await getCartSummary(state.sessionId);
+      candidate = await getUpsellCandidate(cart.items.map((i) => i.productId));
+    }
+  }
 
   const candidateInstruction = candidate
-  ? `You may suggest exactly this one upsell if it fits naturally: ${candidate.name} (₹${candidate.price}). If a product was just added to the cart this turn, that IS a natural moment — include the upsell suggestion even if you are also asking a clarifying question in the same reply, rather than skipping it. Set upsellProductId to "${candidate.productId}" only if you choose to suggest it, otherwise null.`
-  : `No upsell candidate is available this turn. upsellProductId MUST be null.`;
+    ? `You must mention this upsell naturally as part of your reply: ${candidate.name} (₹${candidate.price}). Use this reasoning, lightly rephrased to fit your sentence: "${candidate.reason}"`
+    : '';
 
   const trimmed = await getTrimmedMessages(state.messages);
   const safeMessages = toSafeMessages(trimmed);
@@ -174,25 +208,31 @@ async function finalizeNode(state: typeof ConvocartState.State) {
     ...safeMessages,
     {
       role: 'user',
-      content: `${candidateInstruction}\nIf you recommended specific products this turn, set recommendedProductIds to their exact "id" values from the most recent search_products result above — never invent an id or leave it empty if real products were shown.\nProduce your final structured response for this turn now.`,
+      content: `${candidateInstruction}\nIf you recommended specific products this turn, set recommendedProductIds to their exact "id" values from the most recent search_products result above.\nProduce your final structured response for this turn now.`,
     },
   ]);
 
-  if (structured.upsellProductId && structured.upsellProductId !== candidate?.productId) {
+  if (candidate) {
+    structured.upsellProductId = candidate.productId;
+    structured.upsellReason = candidate.reason;
+
+    const marked = await prisma.session.updateMany({
+      where: { id: state.sessionId, upsellOfferedOnce: false },
+      data: { upsellOfferedOnce: true },
+    });
+
+    if (marked.count > 0) {
+      await prisma.auditLog.create({
+        data: {
+          sessionId: state.sessionId,
+          eventType: 'upsell_offered',
+          reasonText: `Offered ${candidate.name} — ${candidate.reason}`,
+        },
+      });
+    }
+  } else {
     structured.upsellProductId = null;
     structured.upsellReason = null;
-  }
-
-  if (candidate) {
-    await prisma.auditLog.create({
-      data: {
-        sessionId: state.sessionId,
-        eventType: structured.upsellProductId ? 'upsell_offered' : 'upsell_candidate_skipped',
-        reasonText: structured.upsellProductId
-          ? `Offered ${candidate.name} — ${structured.upsellReason ?? 'no reason given'}`
-          : `Candidate ${candidate.name} was available but not offered this turn`,
-      },
-    });
   }
 
   return { structuredOutput: structured };

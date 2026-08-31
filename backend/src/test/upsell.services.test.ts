@@ -35,6 +35,11 @@ describe('getUpsellCandidate', () => {
     (prisma.productCrossSell.findMany as any).mockResolvedValue([
       { crossSellProduct: { id: 'acc-1', name: 'Insoles', price: 59900, stock: 10 } },
     ]);
-    expect(await getUpsellCandidate(['shoe-1'])).toEqual({ productId: 'acc-1', name: 'Insoles', price: 599 });
+    expect(await getUpsellCandidate(['shoe-1'])).toEqual({
+      productId: 'acc-1',
+      name: 'Insoles',
+      price: 599,
+      reason: 'Insoles is a common add-on for this purchase.',
+    });
   });
 });
