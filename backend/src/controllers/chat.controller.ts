@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ChatMessageInput } from '../schemas/chat.schema';
-import { runAgentTurn } from '../agent/runTurn';
+import { chatQueue, chatQueueEvents } from '../queue/chat.queue';
 import { getProductsByIds } from '../services/products.services';
 import { prisma } from '../db/prisma';
 import { ApiError } from '../utils/ApiError';
@@ -17,7 +17,8 @@ export async function sendMessageHandler(req: Request, res: Response, next: Next
 
     await prisma.message.create({ data: { sessionId, role: 'user', content: message } });
 
-    const output = await runAgentTurn(sessionId, message);
+    const job = await chatQueue.add('turn', { sessionId, message });
+    const output = await job.waitUntilFinished(chatQueueEvents, 60_000);
 
     await prisma.message.create({ data: { sessionId, role: 'assistant', content: output.reply } });
 
