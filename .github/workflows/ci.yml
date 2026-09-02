@@ -12,31 +12,40 @@ jobs:
     env:
       NODE_ENV: test
       GEMINI_API_KEY: test-key
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
+
       - name: Install dependencies
         working-directory: backend
         run: npm ci
+
       - name: Generate Prisma client
         working-directory: backend
         run: npx prisma generate
+
       - name: Type check
         working-directory: backend
         run: npm run typecheck
+
       - name: Lint
         working-directory: backend
         run: npm run lint
+
       - name: Unit tests
         working-directory: backend
         run: npm test
+
       - name: Integration tests
         working-directory: backend
         run: npm run test:integration
+
       - name: Build
         working-directory: backend
         run: npm run build
@@ -45,31 +54,37 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/convocart-backend:latest
+
   deploy:
     needs: docker
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && vars.GCP_VM_READY == 'true'
+    if: github.ref == 'refs/heads/main' && vars.AZURE_VM_READY == 'true'
+
     steps:
-      - name: Deploy to GCP VM
+      - name: Deploy to Azure VM
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.GCP_VM_HOST }}
-          username: ${{ secrets.GCP_VM_USER }}
-          key: ${{ secrets.GCP_VM_SSH_KEY }}
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
+
           script: |
-            docker pull ghcr.io/${{ github.repository }}/convocart-backend:latest
+            docker pull ghcr.io/${{ github.repository_owner }}/convocart-backend:latest
             docker stop convocart-backend || true
             docker rm convocart-backend || true
-            docker run -d --name convocart-backend --env-file /home/${{ secrets.GCP_VM_USER }}/.env -p 4000:4000 ghcr.io/${{ github.repository }}/convocart-backend:latest
+            docker run -d --name convocart-backend --env-file /home/${{ secrets.AZURE_VM_USER }}/.env -p 4000:4000 ghcr.io/${{ github.repository_owner }}/convocart-backend:latest

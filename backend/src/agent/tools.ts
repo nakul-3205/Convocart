@@ -8,31 +8,42 @@ import { prisma } from '../db/prisma';
 export const searchProductsTool = tool(
   async (input, config) => {
     const sessionId = config?.configurable?.thread_id as string | undefined;
-
     let excludeIds: string[] = [];
     if (sessionId) {
       const session = await prisma.session.findUnique({ where: { id: sessionId } });
       excludeIds = (session?.shownProductIds as string[] | null) ?? [];
     }
 
-    const result = await searchProducts(ProductSearchQuery.parse(input), excludeIds);
+    const parsedInput = ProductSearchQuery.parse(input);
+    const result = await searchProducts(parsedInput, excludeIds);
 
+    let alreadyShownCount = 0;
+    if (excludeIds.length > 0) {
+      const rawTotal = await searchProducts(parsedInput, []);
+      alreadyShownCount = rawTotal.total - result.total;
+    }
 
     if (sessionId && result.items.length > 0) {
-      const newIds = result.items.map((p) => p.id);
-      const merged = Array.from(new Set([...excludeIds, ...newIds]));
+      const merged = Array.from(new Set([...excludeIds, ...result.items.map((p) => p.id)]));
       await prisma.session.update({ where: { id: sessionId }, data: { shownProductIds: merged } });
     }
 
     return JSON.stringify({
-      items: result.items.map((p) => ({ id: p.id, name: p.name, price: p.price / 100, size: p.size })),
+      items: result.items.map((p) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price / 100,
+        size: p.size,
+      })),
       total: result.total,
       hasMore: result.hasMore,
+      alreadyShownCount,
     });
   },
   {
     name: 'search_products',
-    description: 'Search the shoe catalog by sub-category, size, and max price. Use whenever the customer describes what they want, or asks to see more/different options.',
+    description:
+      'Search the shoe catalog by sub-category, size, and max price. Use whenever the customer describes what they want, or asks to see more/different options.',
     schema: ProductSearchQuery.omit({ page: true, pageSize: true }),
   },
 );
@@ -41,7 +52,9 @@ export const addToCartTool = tool(
   async (input: { productId: string; qty: number }, config) => {
     const sessionId = config?.configurable?.thread_id as string | undefined;
     if (!sessionId) {
-      throw new Error('Missing session context for add_to_cart — this should never happen if called through the normal chat flow');
+      throw new Error(
+        'Missing session context for add_to_cart — this should never happen if called through the normal chat flow',
+      );
     }
     const summary = await addToCart(sessionId, input.productId, input.qty);
     return JSON.stringify(summary);
@@ -51,7 +64,9 @@ export const addToCartTool = tool(
     description:
       "Add a product to the customer's cart by its exact product ID (from a prior search_products result) and quantity. Always call this when a customer asks to add or order something — never claim an item was added without actually calling it first.",
     schema: z.object({
-      productId: z.string().describe('The exact id field from a search_products result — never a product name'),
+      productId: z
+        .string()
+        .describe('The exact id field from a search_products result — never a product name'),
       qty: z.number().int().min(1).max(5),
     }),
   },
